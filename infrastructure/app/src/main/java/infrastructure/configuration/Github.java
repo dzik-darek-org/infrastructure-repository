@@ -26,7 +26,7 @@ public class Github {
 
     private static final String LABEL_CRITICAL_NAME = "Critical";
 
-    private static final List REQUIRED_WORKFLOWS = List.of();
+    private static final List REQUIRED_WORKFLOWS = List.of("Compile and test");
 
     public void configure(Context ctx) {
 
@@ -71,11 +71,11 @@ public class Github {
                         .pattern(branchDefault.branch()) // pattern for names of branches, to which the protection should be apllied
                         .requireConversationResolution(true) // all discussion in pull request should be resolved before merge
                         .requiredPullRequestReviews(BranchProtectionRequiredPullRequestReviewArgs.builder()
-                                .requiredApprovingReviewCount(2) // how many approvals required before merge
+                                .requiredApprovingReviewCount(1) // how many approvals required before merge
                                 .build())
-//                        .requiredStatusChecks(BranchProtectionRequiredStatusCheckArgs.builder()
-//                                .contexts(REQUIRED_WORKFLOWS)
-//                                .build())
+                        .requiredStatusChecks(BranchProtectionRequiredStatusCheckArgs.builder()
+                                .contexts(REQUIRED_WORKFLOWS)
+                                .build())
                         .build()
         );
 
