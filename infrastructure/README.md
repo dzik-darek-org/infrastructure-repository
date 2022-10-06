@@ -1,0 +1,289 @@
+# GitHub configuration & CI/CD example
+
+This repository contains example of:  
+* GitHub repository configuration within a GitHub Organization 
+with use of [Pulumi][url-pulumi],  
+* CI/CD setup with use of [GitHub Actions][url-github-actions-quickstart].  
+
+## GitHub as project management tool
+
+### Organizations 
+
+GitHub allows to create [Organizations][url-github-organizations-docs] and gather project-related things, 
+like issues, tasks, repositories, etc. in one place.  
+![image-github-organization-members]
+
+### Projects
+
+[Projects][url-github-projects-docs] allow to track and manage issues. 
+They deliver comfy ways to link issues with contents of repositories (like pull requests).
+![image-github-project]
+
+### Pull requests && CI/CD
+
+Pull requests at GitHub are fully integrated with [GitHub Actions][url-github-actions-quickstart] -
+a tremendous tool for automation of builds and deployment.
+
+//TODO describe PRs and Checks
+
+#### Automation of GitHub Actions
+
+**GitHub Actions** can be automated with special configuration files (YAML).  
+Inside the repository one should create folders `.github/workflows` 
+and put the configuration file inside `workflows` folder.  
+Example configuration of a workflow (file `infrastucture-repository.yml`):  
+```yaml
+name: Compile and test # workflow name
+
+on: # events trigerring workflow
+  pull_request: 
+
+jobs:
+  compile-and-test: # job name
+  runs-on: ubuntu-latest # operating system of virtual machine, on which workflow should run
+  steps:
+    - name: Checkout project sources # step name
+    - uses: actions/checkout@v2 # github action to take
+    - name: Setup Gradle
+    - uses: gradle/gradle-build-action@v2
+    - name: Compile and test
+    - run: ./gradlew build test
+```
+
+## Pulumi
+
+[Pulumi][url-pulumi] is an open-source tool allowing to set up the configuration for cloud services (mostly) 
+within application's code (so called Infrastructure-as-Code).  
+It supports multiple languages (i. e. Python, C#, Java) and cloud providers (AWS, Azure, Google Cloud).
+Community creates own provider packages for other services and publishes them to [Pulumi Registry][url-pulumi-registry].  
+In this case we are focusing on [GitHub provider][url-pulumi-registry-github].
+
+==Using Pulumi with GitHub provider allows to configure GitHub repositories comfortably from the code 
+instead of clicking on multiple tabs and pages in UI settings
+and to keep single source of truth for the configuration.==
+
+### Requirements
+
+In order to work with [Pulumi][url-pulumi] one has to:  
+* install [Pulumi CLI][url-pulumi-cli] - it is used to configure and manage the deployment state of resources,
+* create [Pulumi Service][url-pulumi-service] account - web application provided by developers of Pulumi,
+it manages the deployment state of resources (**CLI** automatically uses the **Service**) 
+and allows to browse the deployment state on dedicated web page.  
+    Official **Pulumi Service** can be omitted if one decides to set up self-managed backend for the Service.
+
+### Including Pulumi into project
+
+Steps to begin using Pulumi and basic configuration:
+
+1. Install [**Pulumi CLI**][url-pulumi-cli].
+2. Create [**Pulumi Service**][url-pulumi-service] account. 
+3. Create **Pulumi Access Token** at **Pulumi Service**, it will be used to log in into **Pulumi CLI**, 
+save the token locally (i. e. in [KeePassXC][url-keepassxc]), because it won't be discoverable after creation.  
+   ![image-pulumi-security-token-creation]  
+4. Log in into **Pulumi CLI** - in terminal use command `pulumi login` and then paste the access token.
+5. Create a project - in this case a Java application with Gradle as build system.  
+    ![image-gradle-init]  
+6. Add dependencies to Pulumi packages - [core package in Java language][url-maven-pulumi-java] 
+and [provider package][url-maven-pulumi-github] to `build.gradle.kts` file:  
+    ```kotlin
+    repositories {
+        mavenCentral()
+    }
+    
+    dependencies {
+        implementation("com.pulumi:pulumi:(,1.0]")
+        implementation("com.pulumi:github:5.0.0")
+    }
+    ```
+7. Create [configuration file][url-pulumi-yaml] `Pulumi.yaml` in root directory of project, fill it with basic configuration properties:  
+   ```yaml
+   name: infrastructure # name of the project
+   description: A minimal Java Pulumi program with Gradle builds and configuration for GitHub project
+   runtime: java # installed language runtime for the project
+   ```
+8. Create a **Stack** - it can be understood as a set of resources, it keeps theirs state and configuration 
+and will be managed by **Pulumi Service** (deployed, updated or deleted).  
+In **CLI** use command `pulumi stack`:  
+![image-pulumi-stack-creation]  
+State and contents of **Stack** will be replicated at **Pulumi Service** 
+and deployment of resources (at any could or GitHub) will happen based on the **Stack**. 
+      
+    At this point **Stack** should be visible at **Pulumi Service**:  
+    ![image-pulumi-service-stack-created]  
+    Tag `github:owner` is visible, because GitHub account was used to sign up to the Service.
+
+## Configuring GitHub repository with Pulumi
+
+After setting up Pulumi like described above, one can begin to configure resources in code.
+
+### Resources
+
+In Pulumi's terminology a [Resource][url-pulumi-resources-docs] is a fundamental unit representing a computing instance, storage 
+or any entity from a provider's universe.  
+
+Simply declaring a resource in code causes its creation by **Pulumi Service**.
+
+Each resource declaration follows pattern:  
+```java
+new Resource("resource name", // name of the resource for Pulumi
+        ResourceArgs.builder()
+            .id(1) // property of the resource
+            .build(),
+        CustomResourceOptions.builder() // properties common for every resource
+            .parent(anotherResource)
+            .build()
+);
+```
+
+[GitHub provider][url-pulumi-registry-github] for Pulumi delivers representations for various resources 
+(like repositories, branches) in form of corresponding classes.  
+
+Available resources are listed in [docs][url-pulumi-github-docs]. 
+Unfortunately, not every resource is completely described, 
+because Java support for Pulumi is in the initial phase of development.  
+Better descriptions are available in [documentation for Terraform][url-terraform-github-docs].
+
+#### Repository
+
+Creation of Repository resource:  
+```java
+final var repository = new Repository(REPOSITORY_NAME,
+        RepositoryArgs.builder()
+                .name(REPOSITORY_NAME) // name of the repository
+                .autoInit(true) // creates main branch and initial commit
+                .allowAutoMerge(false)
+                .allowAutoMerge(false)
+                .allowSquashMerge(true)
+                .allowRebaseMerge(false)
+                .deleteBranchOnMerge(true)
+                .hasDownloads(true)
+                .hasIssues(true)
+                .hasProjects(true)
+                .visibility("public")
+                .build(),
+        CustomResourceOptions.builder()
+                .protect(true)
+                .build()
+);
+```
+
+#### Default Branch
+
+Creation of default branch in repository created earlier:  
+```java
+final var branchDefault = new BranchDefault(BRANCH_DEFAULT_NAME,
+        BranchDefaultArgs.builder()
+                .branch(BRANCH_DEFAULT_NAME)
+                .repository(repository.name()) // in which repository branch should be created
+                .build()
+);
+```
+
+#### Branch Protection
+
+Setting the security options for repository and branches:  
+```java
+final var branchProtection = new BranchProtection(BRANCH_DEFAULT_PROTECTION_NAME,
+        BranchProtectionArgs.builder()
+                .repositoryId(repository.nodeId()) // link branch protection to repository
+                .pattern(branchDefault.branch()) // pattern for names of branches, to which the protection should be apllied
+                .requireConversationResolution(true) // all discussion in pull request should be resolved before merge
+                .requiredPullRequestReviews(BranchProtectionRequiredPullRequestReviewArgs.builder()
+                        .requiredApprovingReviewCount(2) // how many approvals required before merge
+                        .build())
+                .requiredStatusChecks(BranchProtectionRequiredStatusCheckArgs.builder()
+                        .contexts(REQUIRED_WORKFLOWS)
+                        .build())
+                .build()
+);
+```
+
+#### Labels for Issues
+
+Creation of labels, which can be attached to issues in project:  
+```java
+final var labelCritical = new IssueLabel(LABEL_CRITICAL_NAME,
+        IssueLabelArgs.builder()
+                .repository(repository.name())
+                .name(LABEL_CRITICAL_NAME)
+                .color("FF0000") // color hex without hash
+                .build()
+);
+```
+
+### Deployment
+
+After setting up the configuration one can check, what will Pulumi do and which resources will be created.  
+In order to do this, simply use command `pulumi preview` in terminal:  
+![image-pulumi-preview]  
+
+#### Authentication at GitHub
+
+To let Pulumi know, for which user or organization the resources should be created,
+one has to set `github:owner` configuration variable.  
+It can be done in **Pulumi CLI** with use of command:  
+`pulumi config set github:owner <owner-name>`
+
+Every action taken at GitHub by Pulumi requires Pulumi to be authenticated and to have particular permissions.  
+To authenticate Pulumi, one has to create [Personal Access Token][url-github-personal-access-token-docs] at GitHub
+and then set variable `github:token` in **Pulumi CLI** with use of command:  
+`pulumi config set github:token <token> --secret`  
+
+![image-pulumi-config]
+
+#### Resources deployment
+
+Deployment can be initiated with use of command `pulumi up`:  
+
+![image-pulumi-up]
+
+At **Pulumi Service** following resources were created:
+
+![image-pulumi-service-resources-created]
+
+Initial state of repository at GitHub:
+
+![image-github-created-repository]
+
+## Summary
+
+//TODO complete summary??
+
+## Links & sources
+
+//TODO complete
+
+[image-pulumi-config]: assets/images/pulumi_config.png
+[image-pulumi-preview]: assets/images/pulumi_preview.png
+[image-pulumi-security-token-creation]: assets/images/pulumi_security_token_creation.jpg
+[image-pulumi-stack-creation]: assets/images/pulumi_stack_creation.png
+[image-pulumi-service-resources-created]: assets/images/pulumi_service_resources_created.png
+[image-pulumi-service-stack-created]: assets/images/pulumi_service_stack_created.png
+[image-pulumi-up]: assets/images/pulumi_up.png
+
+[image-github-created-repository]: assets/images/github_created_repository.png
+[image-github-project]: assets/images/github_project.png
+[image-github-organization-members]: assets/images/github_organization_members.png
+
+[image-gradle-init]: assets/images/gradle_init.png
+
+[url-pulumi]: https://www.pulumi.com/
+[url-pulumi-cli]: https://www.pulumi.com/docs/reference/cli/
+[url-pulumi-github-docs]: https://www.pulumi.com/registry/packages/github/api-docs/
+[url-pulumi-registry]: https://www.pulumi.com/registry/
+[url-pulumi-registry-github]: https://www.pulumi.com/registry/packages/github/
+[url-pulumi-resources-docs]: https://www.pulumi.com/docs/intro/concepts/resources/
+[url-pulumi-service]: https://www.pulumi.com/docs/intro/pulumi-service/
+[url-pulumi-yaml]: https://www.pulumi.com/docs/reference/pulumi-yaml/
+
+[url-terraform-github-docs]: https://registry.terraform.io/providers/integrations/github/latest/docs
+
+[url-github-actions-quickstart]: https://docs.github.com/en/actions/quickstart
+[url-github-organizations-docs]: https://docs.github.com/en/organizations/collaborating-with-groups-in-organizations/about-organizations
+[url-github-personal-access-token-docs]: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token
+[url-github-projects-docs]: https://docs.github.com/en/issues/planning-and-tracking-with-projects/learning-about-projects/about-projects
+
+[url-keepassxc]: https://keepassxc.org/
+
+[url-maven-pulumi-github]: https://search.maven.org/artifact/com.pulumi/github/5.0.0/jar
+[url-maven-pulumi-java]: https://search.maven.org/artifact/com.pulumi/pulumi/0.6.0/jar

@@ -1,0 +1,13 @@
+### IntelliJ ###
+**/*.idea/*
+*.iml
+
+### Java ###
+*.class
+*.jar
+
+### Gradle ###
+.gradle
+**/build/
+!gradle-wrapper.jar
+!gradle-wrapper.properties
