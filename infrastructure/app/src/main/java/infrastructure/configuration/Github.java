@@ -4,13 +4,9 @@ import com.pulumi.Context;
 import com.pulumi.github.*;
 import com.pulumi.github.inputs.BranchProtectionRequiredPullRequestReviewArgs;
 import com.pulumi.github.inputs.BranchProtectionRequiredStatusCheckArgs;
-import com.pulumi.github.inputs.GetOrganizationArgs;
-import com.pulumi.resources.CustomResource;
 import com.pulumi.resources.CustomResourceOptions;
 
-import java.lang.reflect.Field;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 public class Github {
 
@@ -26,17 +22,9 @@ public class Github {
 
     private static final String LABEL_CRITICAL_NAME = "Critical";
 
-    private static final List REQUIRED_WORKFLOWS = List.of("Compile and test");
+    private static final List<String> REQUIRED_WORKFLOWS = List.of("Compile and test");
 
     public void configure(Context ctx) {
-
-        // find existing organization by its name
-//        final var organization = GithubFunctions.getOrganization(
-//                GetOrganizationArgs.builder()
-//                        .name(ORGANIZATION_NAME)
-//                        .build()
-//        );
-
         // declare repository resource
         final var repository = new Repository(REPOSITORY_NAME, // name of the resource for Pulumi
                 RepositoryArgs.builder()
@@ -53,7 +41,7 @@ public class Github {
                         .visibility("public")
                         .build(),
                 CustomResourceOptions.builder() // third parameter of constructor are options common for all resources
-                        //.protect(true)
+                        .protect(true)
                         .build()
         );
 
