@@ -1,0 +1,20 @@
+name: Compile and test # workflow name
+
+on: # events trigerring workflow
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  compile-and-test: # job name
+    name: Compile and test
+    runs-on: ubuntu-latest # operating system of virtual machine, on which workflow should run
+    steps:
+      - name: Checkout project sources # step name
+        uses: actions/checkout@v2 # github action to take
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+      - name: Compile and test
+        working-directory: ./infrastructure # location of project sources
+        run: ./gradlew build test
+
